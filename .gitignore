@@ -1,0 +1,6 @@
+venv/
+backend/data/token.txt
+__pycache__/
+*.pyc
+logs/
+server/data/

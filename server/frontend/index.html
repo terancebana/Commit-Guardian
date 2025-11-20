@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CommitGuardian</title>
+    <style>
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+
+    <div id="app">
+        <h1>Commit Guardian</h1>
+        
+        <div id="loading-message">Loading GitHub status...</div>
+
+        <div id="dashboard" class="hidden">
+            
+            <h2 id="status-header">Checking...</h2>
+            <p id="status-message">...</p>
+
+            <div class="stats">
+                <p><strong>Current Streak:</strong> <span id="streak-count">0</span> days</p>
+                <p><strong>Last Push:</strong> <span id="last-push-date">-</span></p>
+            </div>
+
+            <div id="action-container" class="hidden">
+                <hr>
+                <h3>Streak at Risk</h3>
+                <p>You haven't committed anything today.</p>
+                
+                <button id="btn-push-junk">Yes, Push Junk Commit</button>
+                <button id="btn-refresh">Refresh Status</button>
+            </div>
+
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
