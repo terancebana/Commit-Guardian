@@ -1,10 +1,25 @@
 document.addEventListener('DOMContentLoaded', () => {
     checkStatus();
-
-    // Attach event listeners to buttons
-    document.getElementById('btn-push-junk').addEventListener('click', pushJunk);
-    document.getElementById('btn-refresh').addEventListener('click', checkStatus);
+    const pushBtn = document.getElementById('btn-push-junk');
+    const refreshBtn = document.getElementById('btn-refresh');
+    const logoutBtn = document.getElementById('btn-logout');
+    const simulateBtn = document.getElementById('btn-simulate');
+    const clearSimBtn = document.getElementById('btn-clear-simulate');
+    const sendEmailBtn = document.getElementById('btn-send-email');
+    if (pushBtn) pushBtn.addEventListener('click', pushJunk);
+    if (refreshBtn) refreshBtn.addEventListener('click', checkStatus);
+    if (logoutBtn) logoutBtn.addEventListener('click', logout);
+    if (simulateBtn) simulateBtn.addEventListener('click', simulateMiss);
+    if (clearSimBtn) clearSimBtn.addEventListener('click', clearSimulation);
+    if (sendEmailBtn) sendEmailBtn.addEventListener('click', sendTestEmail);
 });
+
+function logout() {
+    fetch('/logout', { method: 'POST' })
+        .then(() => {
+            window.location.href = '/login.html';
+        });
+}
 
 async function checkStatus() {
     const loadingEl = document.getElementById('loading-message');
@@ -13,19 +28,20 @@ async function checkStatus() {
     const statusMsg = document.getElementById('status-message');
     const actionContainer = document.getElementById('action-container');
 
-    // Show loading
     loadingEl.classList.remove('hidden');
     dashboardEl.classList.add('hidden');
 
     try {
         const response = await fetch('/api/status');
+        if (response.status === 401) {
+            window.location.href = '/login.html';
+            return;
+        }
         const data = await response.json();
 
-        // Update Stats
         document.getElementById('streak-count').textContent = data.current_streak;
         document.getElementById('last-push-date').textContent = data.last_push_date || "Never";
 
-        // Update UI based on status
         if (data.pushed_today) {
             statusHeader.textContent = "You are Safe!";
             statusHeader.className = "status-safe";
@@ -38,13 +54,12 @@ async function checkStatus() {
             actionContainer.classList.remove('hidden');
         }
 
-        // Show dashboard
         loadingEl.classList.add('hidden');
         dashboardEl.classList.remove('hidden');
 
     } catch (error) {
         console.error('Error:', error);
-        loadingEl.textContent = "Error connecting to server.";
+        if (loadingEl) loadingEl.textContent = "Error connecting to server.";
     }
 }
 
@@ -57,12 +72,13 @@ async function pushJunk() {
     btn.disabled = true;
 
     try {
-        // NOTE: We haven't built this endpoint in Python yet. It will 404.
         const response = await fetch('/api/push-junk', { method: 'POST' });
-        
+
         if (response.ok) {
             alert("Success! Junk commit pushed.");
-            checkStatus(); // Refresh to see green
+            checkStatus();
+        } else if (response.status === 401) {
+            window.location.href = '/login.html';
         } else {
             alert("Failed to push. Check server logs.");
         }
@@ -71,5 +87,41 @@ async function pushJunk() {
     } finally {
         btn.textContent = originalText;
         btn.disabled = false;
+    }
+}
+
+async function simulateMiss() {
+    const res = await fetch('/api/simulate-miss', { method: 'POST' });
+    if (res.ok) {
+        alert('Simulation enabled: dashboard will show as if you did not push today.');
+        checkStatus();
+    } else if (res.status === 401) {
+        window.location.href = '/login.html';
+    } else {
+        alert('Failed to enable simulation.');
+    }
+}
+
+async function clearSimulation() {
+    const res = await fetch('/api/clear-simulate', { method: 'POST' });
+    if (res.ok) {
+        alert('Simulation cleared.');
+        checkStatus();
+    } else if (res.status === 401) {
+        window.location.href = '/login.html';
+    } else {
+        alert('Failed to clear simulation.');
+    }
+}
+
+async function sendTestEmail() {
+    if (!confirm('Send a test alert email to the logged-in user?')) return;
+    const res = await fetch('/api/send-test-email', { method: 'POST' });
+    if (res.ok) {
+        alert('Test email sent (or attempted).');
+    } else if (res.status === 401) {
+        window.location.href = '/login.html';
+    } else {
+        alert('Failed to send test email. Check server logs or email configuration.');
     }
 }

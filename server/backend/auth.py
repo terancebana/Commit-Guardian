@@ -10,7 +10,7 @@ def get_login_url():
     params = {
         "client_id": config.GITHUB_CLIENT_ID,
         "redirect_uri": f"{config.BASE_URL}/auth/callback",
-        "scope": "repo read:user",
+        "scope": "repo read:user user:email",
         "allow_signup": "true"
     }
     # Converts dict to string: client_id=123&scope=repo...
@@ -72,3 +72,20 @@ def get_user_profile(token):
     except Exception as e:
         print(f"Profile Fetch Error: {e}")
         return None
+
+
+def get_user_emails(token):
+    headers = {
+        "Authorization": f"token {token}",
+        "Accept": "application/vnd.github.v3+json",
+        "User-Agent": "CommitGuardian"
+    }
+    req = urllib.request.Request("https://api.github.com/user/emails", headers=headers)
+    try:
+        with urllib.request.urlopen(req) as response:
+            if response.status == 200:
+                return json.loads(response.read().decode())
+            return []
+    except Exception as e:
+        print(f"Failed to fetch user emails: {e}")
+        return []

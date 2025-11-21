@@ -17,56 +17,145 @@ FRONTEND_DIR = os.path.join(BASE_DIR, "frontend")
 
 class CommitGuardianHandler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
-        # 1. The Login Route (User clicks "Login")
-        if self.path == '/login':
-            self.handle_login()
-            return
-
-        # 2. The Callback Route (GitHub sends user back here)
+        if self.path.startswith('/login'):
+            if self.path == '/login' or self.path.startswith('/login?'):
+                self.handle_login()
+                return
         if self.path.startswith('/auth/callback'):
             self.handle_callback()
             return
-
-        # 3. The API Routes
         if self.path == '/api/status':
             self.handle_api_status()
-        else:
-            # 4. Serving Files (HTML/CSS/JS)
+            return
+        if self.path == '/login.html':
             self.handle_static_files()
+            return
+        if self.path == '/':
+            self.handle_static_files()
+            return
+        self.handle_static_files()
 
     def do_POST(self):
         if self.path == '/api/push-junk':
-            # 1. Check Session (Security)
             if "Cookie" not in self.headers:
                 self.send_error(401, "Not authenticated")
                 return
-
             cookie = http.cookies.SimpleCookie(self.headers["Cookie"])
             if "session_id" not in cookie:
                 self.send_error(401, "No session found")
                 return
-
             session_id = cookie["session_id"].value
             user_data = SESSIONS.get(session_id)
-
             if not user_data:
                 self.send_error(401, "Invalid session")
                 return
-
-            # 2. Call Pusher with Logged-in Data
             success = junk_pusher.push_junk_commit(
                 user_data['username'],
                 user_data['token']
             )
-            
             if success:
                 self.send_response(200)
                 self.end_headers()
                 self.wfile.write(b'{"status": "pushed"}')
             else:
                 self.send_error(500, "Failed to push (Check logs/permissions)")
-        else:
-            self.send_error(404, "Not Found")
+            return
+        if self.path == '/logout':
+            self._handle_logout()
+            return
+        if self.path == '/api/simulate-miss':
+            if "Cookie" not in self.headers:
+                self._send_json(401, {"error": "not_authenticated"})
+                return
+            cookie = http.cookies.SimpleCookie(self.headers["Cookie"])
+            if "session_id" not in cookie:
+                self._send_json(401, {"error": "no_session"})
+                return
+            session_id = cookie["session_id"].value
+            user_data = SESSIONS.get(session_id)
+            if not user_data:
+                self._send_json(401, {"error": "invalid_session"})
+                return
+            user_data['simulate_miss'] = True
+            self._send_json(200, {"simulate_miss": True})
+            return
+        if self.path == '/api/clear-simulate':
+            if "Cookie" not in self.headers:
+                self._send_json(401, {"error": "not_authenticated"})
+                return
+            cookie = http.cookies.SimpleCookie(self.headers["Cookie"])
+            if "session_id" not in cookie:
+                self._send_json(401, {"error": "no_session"})
+                return
+            session_id = cookie["session_id"].value
+            user_data = SESSIONS.get(session_id)
+            if not user_data:
+                self._send_json(401, {"error": "invalid_session"})
+                return
+            user_data['simulate_miss'] = False
+            self._send_json(200, {"simulate_miss": False})
+            return
+        if self.path == '/api/send-test-email':
+            if "Cookie" not in self.headers:
+                self._send_json(401, {"error": "not_authenticated"})
+                return
+            cookie = http.cookies.SimpleCookie(self.headers["Cookie"])
+            if "session_id" not in cookie:
+                self._send_json(401, {"error": "no_session"})
+                return
+            session_id = cookie["session_id"].value
+            user_data = SESSIONS.get(session_id)
+            if not user_data:
+                self._send_json(401, {"error": "invalid_session"})
+                return
+            users = database.load_users()
+            username = user_data.get('username')
+            user_record = users.get(username, {})
+            target_email = user_record.get('email')
+            try:
+                import notifier
+                success = notifier.send_alert(target_email, username)
+                if success:
+                    self._send_json(200, {"sent": True})
+                else:
+                    self._send_json(500, {"sent": False})
+            except Exception:
+                self._send_json(500, {"sent": False})
+            return
+        self.send_error(404, "Not Found")
+
+    def do_GET(self):
+        if self.path.startswith('/login'):
+            if self.path == '/login' or self.path.startswith('/login?'):
+                self.handle_login()
+                return
+        if self.path.startswith('/auth/callback'):
+            self.handle_callback()
+            return
+        if self.path == '/api/status':
+            self.handle_api_status()
+            return
+        if self.path == '/logout':
+            self._handle_logout()
+            return
+        if self.path == '/login.html':
+            self.handle_static_files()
+            return
+        if self.path == '/':
+            self.handle_static_files()
+            return
+        self.handle_static_files()
+
+    def _handle_logout(self):
+        if "Cookie" in self.headers:
+            cookie = http.cookies.SimpleCookie(self.headers["Cookie"])
+            if "session_id" in cookie:
+                session_id = cookie["session_id"].value
+                SESSIONS.pop(session_id, None)
+        self.send_response(200)
+        self.send_header('Set-Cookie', 'session_id=deleted; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT')
+        self.end_headers()
+        self.wfile.write(b'{}')
 
     # --- NEW AUTH HANDLERS ---
 
@@ -104,16 +193,28 @@ class CommitGuardianHandler(http.server.BaseHTTPRequestHandler):
 
         username = user_profile.get('login')
         email = user_profile.get('email')
+        if not email:
+            emails = auth.get_user_emails(token)
+            primary = None
+            for e in emails:
+                if e.get('primary') and e.get('verified'):
+                    primary = e.get('email')
+                    break
+            if not primary:
+                for e in emails:
+                    if e.get('verified'):
+                        primary = e.get('email')
+                        break
+            email = primary
 
         database.save_user(username, token, email)
-        # --- NEW: CREATE SESSION ---
-        # Generate a random ID (The "Wristband")
         session_id = str(uuid.uuid4())
         
         # Save user info in our memory
         SESSIONS[session_id] = {
             "token": token,
-            "username": user_profile.get('login')
+            "username": user_profile.get('login'),
+            "simulate_miss": False
         }
         
         # 4. Redirect to Dashboard with Cookie
@@ -150,6 +251,10 @@ class CommitGuardianHandler(http.server.BaseHTTPRequestHandler):
                 user_data['username'], 
                 user_data['token']
             )
+            if user_data.get('simulate_miss'):
+                if data.get('pushed_today'):
+                    data['current_streak'] = max(0, data.get('current_streak', 0) - 1)
+                data['pushed_today'] = False
             self._send_json(200, data)
         except Exception as e:
             self.send_error(500, str(e))
