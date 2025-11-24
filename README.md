@@ -1,78 +1,140 @@
-# CommitGuardian 
+CommitGuardian
 
-Short tagline: "A small tool to remind developers to push daily and optionally automate safe commits."
+CommitGuardian is a distributed web application designed to help developers maintain their GitHub contribution streaks. It monitors daily activity using the GitHub API and provides an automated alert system via email if no contributions are detected, offering a streamlined mechanism to push a maintenance commit to preserve the streak.
 
-## Project Overview
-Explain in 2–3 sentences the problem you solve, your approach, and the main user flow.
+Project Overview
 
-## Features
-- Nightly check if a user pushed any commits to a repo (uses GitHub API)
-- Sends a reminder notification if nothing was pushed today
-- Optionally (with user consent) creates 1–6 harmless commits and pushes to the repo
-- Web dashboard to review status and accept auto-push
-- Deployed on two web servers behind a load balancer (Web01, Web02, Lb01)
+The application operates on a client-server architecture designed for distributed infrastructure. It solves the problem of broken coding streaks by automating the verification process and providing a quick-action dashboard for remediation.
 
-## Tech Stack
-- Frontend: HTML, CSS, Vanilla JS (Fetch API, Notification API)
-- Backend: Python 3.x (no web framework; `http.server` / `http.client`)
-- APIs: GitHub REST API, Web Push (VAPID)
-- Deployment: Nginx on Ubuntu, cron, Git
-- Note: All APIs used are free or have free tiers. No external web frameworks used.
+Architecture
 
-## Installation (local)
-1. Clone:
-    git clone git@github.com/terancebana/Commit-Guardian.git
-    cd Commit-Guardian
+Backend: Built with Python's native http.server and socketserver libraries to handle HTTP requests, manage sessions, and interact with external APIs efficiently with zero external dependencies.
 
-2. Create `.env` from `.env.example` and fill values:
-- `GITHUB_TOKEN=...` (optional but recommended for rate limits)
-- `VAPID_PUBLIC_KEY=...` (if using web push)
-- `VAPID_PRIVATE_KEY=...`
-- `NOTIFICATION_EMAIL=...` (optional)
-3. Start backend:
-- (explain exactly how you start `server.py` with python and env vars)
-4. Open `frontend/index.html` in your browser and follow setup instructions.
+Frontend: Developed with HTML5, CSS3, and Vanilla JavaScript, communicating with the backend via a RESTful internal API.
 
-## Deployment (Web01 / Web02 & Lb01)
-Explain:
-- How to copy code to servers (git clone)
-- How to install Python version and dependencies if any
-- How to create system cron job (example crontab entry)
-- How to configure Nginx on Lb01 to reverse-proxy and balance between Web01 and Web02 (include `upstream` config snippet)
-- How to start your backend as a service (use `systemd` unit or a simple `nohup python server.py &` for demo — but `systemd` is preferred for production-like behavior)
-- Provide exact commands you used during deployment and any modifications to firewall/ports.
+Data Persistence: Utilizes a flat-file JSON database (users.json) for lightweight token and setting storage.
 
-## How it works (architecture)
-- Diagram (or explanation) of frontend ↔ backend ↔ GitHub API ↔ local git automation  
-- Explain the “evening check” cron job logic and user consent flow
+Infrastructure: Deployed across high-availability application servers (Web-01, Web-02) behind an Nginx Load Balancer (Lb-01), serving traffic via the domain streak.bterance.tech.
 
-## API usage & endpoints
-- Document backend endpoints (e.g., `/api/status?owner=...&repo=...`, `/api/request_push`, `/api/approve_push`)
-- Show example request/response JSON for each endpoint
-- Include rate limit considerations and caching strategy
+Technical Stack
 
-## Security
-- Explain how you store secrets (no secrets in repo)
-- Explain the GitHub token permissions needed (scopes)
-- Explain VAPID key usage and secure storage
-- Mention best practices for production (rotate tokens, limit scopes)
+Language: Python 3.x
 
-## Testing
-- Manual tests you performed
-- How to run unit tests for modules (if any)
-- How to simulate edge cases (network failure, push conflict)
+Frontend: HTML, CSS, JavaScript
 
-## Challenges & Future Work
-- Things that gave you trouble and how you solved them
-- Optional extensions (Docker, OAuth login, CI/CD, advanced scheduler)
+Server: Nginx (Reverse Proxy & Load Balancer)
 
-## Credits
-- GitHub API docs: https://docs.github.com/en/rest
-- Web Push docs: https://developer.mozilla.org/en-US/docs/Web/API/Notifications_API
+Process Management: Systemd
 
-## Demo video
-- Link to your demo hosted on YouTube (<= 2 minutes)
-- Brief description of what the video shows
+APIs:
 
-## License
-- Your chosen license (MIT recommended)
+GitHub REST API: For fetching commit history and user events.
+
+GitHub OAuth: For secure user authentication.
+
+SMTP: For sending email notifications via Gmail.
+
+Features
+
+OAuth Authentication: Secure user login using GitHub credentials with a custom OAuth implementation.
+
+Activity Dashboard: Real-time visualization of current contribution streaks and last push activity.
+
+Automated Scheduler: A background cron job runs nightly to verify activity for all registered users.
+
+Email Alerts: Automated email notifications containing direct remediation links when inactivity is detected.
+
+Streak Rescue: One-click trigger to push a maintenance commit to a dedicated repository directly from the dashboard.
+
+Developer Controls: Integrated simulation mode for testing UI states and alert workflows.
+
+Installation
+
+Prerequisites
+
+Python 3.10 or higher
+
+A GitHub OAuth App (Client ID and Secret)
+
+A Gmail account with an App Password
+
+Local Setup
+
+Clone the repository:
+
+git clone [https://github.com/terancebana/Commit-Guardian.git](https://github.com/terancebana/Commit-Guardian.git)
+cd Commit-Guardian
+
+
+Configure Environment Variables:
+Create a file at server/data/.env:
+
+GITHUB_CLIENT_ID=your_github_client_id
+GITHUB_CLIENT_SECRET=your_github_client_secret
+BASE_URL=http://localhost:8000
+JUNK_REPO_NAME=daily-activity-log
+EMAIL_SENDER=your_email@gmail.com
+EMAIL_PASSWORD=your_app_password
+
+
+Start the Server:
+
+python3 server/backend/server.py
+
+
+Access the application at http://localhost:8000.
+
+Deployment Guide
+
+This application is deployed using a Round Robin load balancing strategy for high availability.
+
+1. Application Servers (Web-01 & Web-02)
+
+Both servers run an identical instance of the application managed by systemd.
+
+Path: /home/ubuntu/Commit-Guardian
+
+Service: commitguardian.service
+
+Command: /usr/bin/python3 /home/ubuntu/Commit-Guardian/server/backend/server.py
+
+To update the application on the servers:
+
+git pull origin main
+sudo systemctl restart commitguardian
+
+
+2. Load Balancer (Lb-01)
+
+Nginx is configured to distribute traffic evenly between the two application servers.
+
+Configuration Snippet:
+
+upstream backend {
+    server <WEB-01-IP>:8000;
+    server <WEB-02-IP>:8000;
+}
+
+server {
+    listen 80;
+    server_name streak.bterance.tech;
+    location / {
+        proxy_pass http://backend;
+        # ... proxy headers ...
+    }
+}
+
+
+API Reference
+
+The backend exposes the following endpoints:
+
+GET /login: Initiates the GitHub OAuth flow.
+
+GET /api/status: Returns the current user's streak status JSON.
+
+POST /api/push-junk: Triggers the creation of a commit in the target repository.
+
+Authors
+
+CYUZUZO BANA TERANCE
